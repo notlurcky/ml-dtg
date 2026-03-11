@@ -1,0 +1,572 @@
+================================================================================
+        GUÍA DE DEFENSA - PREDICCIÓN DE CALIDAD DEL VINO
+        Prueba de Progreso 1 | Técnicas de Aprendizaje Automático | UCLM 2026
+        Autor: Daniel Tomas Gallego
+================================================================================
+
+================================================================================
+  PARTE 1: EXPLICACIÓN PUNTO POR PUNTO DEL PROYECTO
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+PUNTO 1: ¿DE QUÉ TRATA EL PROYECTO?
+────────────────────────────────────────────────────────────────────────────────
+El proyecto consiste en predecir la CALIDAD DEL VINO (puntuación entre 3 y 9)
+a partir de sus propiedades químicas (alcohol, acidez, sulfatos, etc.).
+
+Se comparan DOS enfoques:
+  • REGRESIÓN: tratamos la calidad como un número continuo (ej: 5.7, 6.2...)
+  • CLASIFICACIÓN: tratamos la calidad como una categoría (ej: clase 5, clase 6...)
+
+Para cada enfoque se prueban 3 algoritmos y se selecciona el mejor.
+Al final se comparan ambos enfoques entre sí.
+
+¿Por qué es interesante este problema?
+  → La calidad del vino es subjetiva (opinión de catadores), pero las propiedades
+    químicas son medibles y objetivas. ML permite automatizar la valoración.
+
+────────────────────────────────────────────────────────────────────────────────
+PUNTO 2: EL DATASET (Wine Quality - UCI)
+────────────────────────────────────────────────────────────────────────────────
+ORIGEN: UCI Machine Learning Repository (ID 186), descargado con ucimlrepo.
+
+DATOS:
+  • ~6497 instancias (vinos tintos y blancos combinados)
+  • 11 características fisicoquímicas (variables X):
+      - fixed_acidity         → acidez fija
+      - volatile_acidity      → acidez volátil
+      - citric_acid           → ácido cítrico
+      - residual_sugar        → azúcar residual
+      - chlorides             → cloruros
+      - free_sulfur_dioxide   → dióxido de azufre libre
+      - total_sulfur_dioxide  → dióxido de azufre total
+      - density               → densidad
+      - pH                    → nivel de pH
+      - sulphates             → sulfatos
+      - alcohol               → % de alcohol
+
+  • 1 variable objetivo (y): quality (entero del 3 al 9)
+
+SIN VALORES FALTANTES: el dataset está completo, no hubo que imputar nada.
+
+────────────────────────────────────────────────────────────────────────────────
+PUNTO 3: ANÁLISIS EXPLORATORIO DE DATOS (EDA)
+────────────────────────────────────────────────────────────────────────────────
+Antes de entrenar modelos, se analiza el dataset visualmente:
+
+a) DISTRIBUCIÓN DE LA CALIDAD:
+   → Está muy desbalanceada: la mayoría de vinos tienen calidad 5, 6 o 7.
+   → Muy pocos vinos en los extremos (calidad 3, 4, 8, 9).
+   → Esto dificulta la clasificación para las clases minoritarias.
+
+b) MAPA DE CORRELACIONES (Heatmap):
+   → Las variables más correlacionadas con la calidad son:
+       • alcohol (+): más alcohol → tendencia a mayor calidad
+       • density (-): más densa → menor calidad
+       • volatile_acidity (-): más acidez volátil → menor calidad
+       • chlorides (-): más cloruros → menor calidad
+
+c) BOXPLOTS:
+   → Muestran cómo cambia cada variable según la calidad del vino.
+   → Se visualizan las 6 características más correlacionadas.
+
+d) HISTOGRAMAS:
+   → Algunas variables tienen distribuciones sesgadas (residual_sugar,
+     chlorides, sulfur_dioxide), lo que justifica la estandarización.
+
+────────────────────────────────────────────────────────────────────────────────
+PUNTO 4: PREPROCESAMIENTO DE DATOS
+────────────────────────────────────────────────────────────────────────────────
+Pasos realizados:
+
+a) VERIFICACIÓN DE VALORES FALTANTES:
+   → No hay ninguno. Dataset limpio.
+
+b) PREPARACIÓN DE LA VARIABLE OBJETIVO:
+   → Para regresión: quality como float (número continuo)
+   → Para clasificación: quality como int (número entero = clase)
+
+c) DIVISIÓN TRAIN/TEST (80/20):
+   → 80% para entrenar los modelos
+   → 20% para evaluar (datos que el modelo no ha visto nunca)
+   → random_state=42 para reproducibilidad
+   → SE USA LA MISMA PARTICIÓN para regresión y clasificación → comparación justa
+
+d) ESTANDARIZACIÓN (StandardScaler):
+   → Transforma cada característica para tener media=0 y desviación=1
+   → IMPORTANTE: el scaler se ajusta SOLO con los datos de entrenamiento
+     y se aplica igual al test (evita data leakage / fuga de información)
+   → Necesario porque las variables tienen escalas muy distintas:
+     ej: total_sulfur_dioxide puede llegar a 300, mientras pH está entre 2-4
+
+────────────────────────────────────────────────────────────────────────────────
+PUNTO 5: MODELOS DE REGRESIÓN (3 algoritmos)
+────────────────────────────────────────────────────────────────────────────────
+Se tratan la calidad como número continuo. Los 3 modelos son:
+
+1. RANDOM FOREST REGRESSOR:
+   → Conjunto de muchos árboles de decisión (ensemble)
+   → Cada árbol se entrena con una muestra aleatoria de datos y features
+   → La predicción final es el PROMEDIO de todos los árboles
+   → Ventaja: robusto ante sobreajuste, maneja no linealidades
+
+2. DECISION TREE REGRESSOR:
+   → Un solo árbol de decisión que divide el espacio de características
+   → Fácil de interpretar pero propenso al sobreajuste
+   → Sin poner límites (max_depth), puede memorizar el training set
+
+3. BAYESIAN RIDGE REGRESSOR:
+   → Versión bayesiana de la regresión lineal
+   → Estima una distribución de probabilidad sobre los pesos del modelo
+   → SE USA EN VEZ DE NAIVE BAYES porque Naive Bayes NO soporta regresión
+     (es un algoritmo exclusivamente de clasificación)
+   → Es el equivalente bayesiano para tareas de regresión
+
+OPTIMIZACIÓN: Para cada modelo se usa GridSearchCV con validación cruzada
+de 5 pliegues (5-fold CV) para encontrar los mejores hiperparámetros.
+
+────────────────────────────────────────────────────────────────────────────────
+PUNTO 6: MÉTRICAS DE REGRESIÓN
+────────────────────────────────────────────────────────────────────────────────
+Se evalúan 4 métricas:
+
+  • MAE (Mean Absolute Error): error absoluto medio
+    → Promedio de |real - predicho|. Fácil de interpretar.
+    → Ejemplo: MAE=0.5 significa que el modelo se equivoca en media 0.5 puntos.
+
+  • MSE (Mean Squared Error): error cuadrático medio
+    → Penaliza más los errores grandes. Más sensible a outliers.
+
+  • RMSE (Root Mean Squared Error): raíz del MSE
+    → Misma unidad que la variable objetivo. Más interpretable que MSE.
+
+  • R² (Coeficiente de Determinación):
+    → Indica qué % de la varianza explica el modelo.
+    → R²=1 → predicción perfecta. R²=0 → el modelo no aporta nada.
+    → Es la métrica principal para seleccionar el mejor modelo de regresión.
+
+MEJOR MODELO DE REGRESIÓN → Random Forest (mayor R², menor MAE y RMSE)
+
+────────────────────────────────────────────────────────────────────────────────
+PUNTO 7: MODELOS DE CLASIFICACIÓN (3 algoritmos)
+────────────────────────────────────────────────────────────────────────────────
+Se trata la calidad como una categoría discreta. Los 3 modelos son:
+
+1. RANDOM FOREST CLASSIFIER:
+   → Igual que en regresión, pero la predicción es por VOTACIÓN mayoritaria
+   → Cada árbol vota por una clase, gana la más votada
+
+2. DECISION TREE CLASSIFIER:
+   → Un solo árbol de clasificación
+   → Aprende reglas como "si alcohol > 11 y volatile_acidity < 0.3 → clase 7"
+   → Interpretable pero sobreajusta
+
+3. GAUSSIAN NAIVE BAYES (GaussianNB):
+   → Clasificador probabilístico basado en el Teorema de Bayes
+   → Asume que las características son INDEPENDIENTES entre sí
+     (esta asunción raramente se cumple en datos reales)
+   → Asume que cada característica sigue una distribución gaussiana (normal)
+   → Muy rápido de entrenar pero menos preciso cuando hay correlaciones
+
+OPTIMIZACIÓN: GridSearchCV con 5-fold CV, optimizando F1-score weighted.
+
+────────────────────────────────────────────────────────────────────────────────
+PUNTO 8: MÉTRICAS DE CLASIFICACIÓN
+────────────────────────────────────────────────────────────────────────────────
+Se evalúan varias métricas:
+
+  • ACCURACY: % de predicciones correctas sobre el total
+    → Puede ser engañosa con clases desbalanceadas
+
+  • F1-SCORE (weighted): media armónica de precision y recall
+    → Weighted: pondera por el número de muestras de cada clase
+    → Es la métrica principal para seleccionar el mejor modelo
+
+  • F1-SCORE (macro): igual pero sin ponderar (importa igual cada clase)
+    → Más "justo" con clases minoritarias
+
+  • PRECISION: de los que predije como clase X, ¿cuántos eran realmente X?
+
+  • RECALL: de los que eran clase X, ¿cuántos detecté correctamente?
+
+  • MATRIZ DE CONFUSIÓN:
+    → Tabla que muestra predicciones vs valores reales para cada clase
+    → Permite ver dónde se confunde el modelo (ej: predice 6 cuando es 5)
+
+  • CURVA ROC y AUC:
+    → Se calcula en modo One-vs-Rest (una clase contra todas las demás)
+    → AUC cerca de 1 → excelente separación. AUC=0.5 → aleatorio.
+
+MEJOR MODELO DE CLASIFICACIÓN → Random Forest (mejor F1 weighted y accuracy)
+
+────────────────────────────────────────────────────────────────────────────────
+PUNTO 9: COMPARACIÓN FINAL REGRESIÓN vs CLASIFICACIÓN
+────────────────────────────────────────────────────────────────────────────────
+Para comparar ambos enfoques de forma justa:
+  → Las predicciones de regresión se REDONDEAN al entero más cercano
+    y se recortan al rango [3,9] con np.clip()
+  → Así se pueden comparar con las mismas métricas de clasificación
+
+La variable quality es ORDINAL (tiene orden pero valores discretos), lo que
+hace que ambos enfoques sean válidos:
+
+  ✓ VENTAJAS DE REGRESIÓN:
+    - Captura el orden entre clases (5<6<7)
+    - Penaliza más errores graves (predecir 3 cuando es 9)
+    - Puede dar estimaciones continuas (6.3, útil para ranking)
+
+  ✓ VENTAJAS DE CLASIFICACIÓN:
+    - Directamente orientado al problema (queremos una clase, no un número)
+    - Probabilidades por clase (útil para toma de decisiones)
+    - Métricas más intuitivas (accuracy, F1)
+
+RESULTADO TÍPICO: Random Forest gana en ambos enfoques. La clasificación
+suele tener accuracy/F1 algo más alta que la regresión redondeada.
+
+────────────────────────────────────────────────────────────────────────────────
+PUNTO 10: CONCLUSIONES DEL PROYECTO
+────────────────────────────────────────────────────────────────────────────────
+1. Random Forest es el mejor modelo tanto para regresión como clasificación
+   porque combina múltiples árboles (reducción de varianza) y es robusto
+   ante el sobreajuste.
+
+2. El desbalance de clases afecta especialmente a las clases extremas
+   (calidad 3, 4, 8, 9) que tienen muy pocas muestras.
+
+3. El alcohol es la característica más importante en ambos enfoques.
+
+4. BayesianRidge falla porque la relación entre variables no es lineal.
+
+5. Naive Bayes falla porque asume independencia entre variables, lo cual
+   no se cumple (hay correlaciones entre densidad, alcohol, azúcar, etc.)
+
+6. Para mejorar los resultados se podría usar:
+   - SMOTE para balancear las clases
+   - Gradient Boosting (XGBoost, LightGBM) → más potente que Random Forest
+   - Ingeniería de características (crear variables derivadas)
+
+================================================================================
+  PARTE 2: LO QUE DEBES ESTUDIAR POR SI TE PREGUNTAN MÁS
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+TEMA A: CONCEPTOS BÁSICOS DE ML (muy probable que pregunten)
+────────────────────────────────────────────────────────────────────────────────
+
+¿Qué es el sobreajuste (overfitting)?
+  → El modelo "memoriza" los datos de entrenamiento y falla con datos nuevos.
+  → Síntoma: accuracy muy alta en train, mucho menor en test.
+  → Solución: regularización, más datos, modelos más simples, cross-validation.
+
+¿Qué es el subajuste (underfitting)?
+  → El modelo es demasiado simple para capturar los patrones.
+  → Síntoma: accuracy baja tanto en train como en test.
+
+¿Por qué dividir en train/test?
+  → Si evaluamos con los mismos datos que usamos para entrenar, el modelo
+    parece mejor de lo que es (ha "visto" las respuestas antes).
+  → El test set simula datos del mundo real que el modelo no ha visto nunca.
+
+¿Qué es la validación cruzada (Cross-Validation)?
+  → En k-fold CV, se divide el training set en k partes iguales.
+  → Se entrena k veces, cada vez usando k-1 partes para entrenar y 1 para validar.
+  → El resultado final es el promedio de las k evaluaciones.
+  → EN EL PROYECTO se usa 5-fold CV dentro de GridSearchCV.
+  → Ventaja: evaluación más robusta, usa todos los datos de entrenamiento.
+
+¿Qué es el data leakage (fuga de información)?
+  → Ocurre cuando información del test "contamina" el entrenamiento.
+  → EN EL PROYECTO: el StandardScaler se ajusta SOLO con X_train, no con X_test.
+    Si lo ajustáramos con todos los datos, el modelo sabría información del test.
+
+────────────────────────────────────────────────────────────────────────────────
+TEMA B: ALGORITMOS (explica cada uno que aparece en el proyecto)
+────────────────────────────────────────────────────────────────────────────────
+
+ÁRBOL DE DECISIÓN (Decision Tree):
+  → Estructura jerárquica de reglas if/else.
+  → Cada nodo hace una pregunta sobre una característica (ej: alcohol > 11?).
+  → Las hojas contienen la predicción final.
+  → HIPERPARÁMETROS clave:
+      - max_depth: profundidad máxima del árbol (limita complejidad)
+      - min_samples_split: mínimo de muestras para hacer una división
+      - min_samples_leaf: mínimo de muestras que debe tener una hoja
+      - criterion: función para medir la calidad de la división
+        (gini / entropy para clasificación; squared_error para regresión)
+  → Un árbol sin límites se sobreajusta → importante poner max_depth.
+
+RANDOM FOREST:
+  → Ensemble de N árboles de decisión (generalmente 100-500).
+  → BAGGING: cada árbol se entrena con una muestra aleatoria con reemplazo
+    (bootstrap sample) del dataset.
+  → RANDOM SUBSPACE: en cada división, solo se considera un subconjunto
+    aleatorio de características.
+  → Predicción: promedio (regresión) o votación mayoritaria (clasificación).
+  → HIPERPARÁMETROS clave:
+      - n_estimators: número de árboles
+      - max_depth: profundidad máxima de cada árbol
+      - min_samples_split, min_samples_leaf: igual que árbol individual
+      - criterion: gini/entropy (clasificación)
+  → Ventaja principal: reduce la varianza sin aumentar el sesgo.
+
+BAYESIAN RIDGE:
+  → Regresión lineal con enfoque bayesiano.
+  → En vez de encontrar UN solo conjunto de pesos, estima una distribución
+    de probabilidad sobre todos los posibles pesos.
+  → Los hiperparámetros alpha_1, alpha_2, lambda_1, lambda_2 controlan
+    la forma de las distribuciones apriori (prior) de los pesos.
+  → Ventaja: regularización automática, no sobreajusta fácilmente.
+  → Limitación: asume relación LINEAL entre features y target.
+
+GAUSSIAN NAIVE BAYES:
+  → Basado en el Teorema de Bayes: P(clase|X) ∝ P(X|clase) * P(clase)
+  → Asunción "naive": las características son INDEPENDIENTES entre sí.
+  → "Gaussian": asume que P(X|clase) sigue una distribución normal.
+  → HIPERPARÁMETRO: var_smoothing (añade ruido pequeño para estabilidad numérica)
+  → Muy rápido y sencillo, pero pierde precisión cuando hay correlaciones.
+
+────────────────────────────────────────────────────────────────────────────────
+TEMA C: MÉTRICAS (saber explicarlas con fórmulas simples)
+────────────────────────────────────────────────────────────────────────────────
+
+REGRESIÓN:
+  MAE  = (1/n) * Σ |y_real - y_pred|          → media de errores absolutos
+  MSE  = (1/n) * Σ (y_real - y_pred)²         → penaliza errores grandes
+  RMSE = √MSE                                  → misma escala que y
+  R²   = 1 - (Σ(y-ŷ)² / Σ(y-ȳ)²)            → var. explicada / var. total
+
+  ¿Cuándo usar MAE vs RMSE?
+  → MAE: cuando los outliers no son importantes
+  → RMSE: cuando los errores grandes son especialmente malos
+
+CLASIFICACIÓN:
+  Accuracy  = aciertos / total
+  Precision = VP / (VP + FP)    → "de los que predije positivo, ¿cuántos lo eran?"
+  Recall    = VP / (VP + FN)    → "de los positivos reales, ¿cuántos detecté?"
+  F1-score  = 2 * (Prec * Rec) / (Prec + Rec)   → media armónica
+
+  VP = Verdaderos Positivos (predije clase X y era clase X)
+  FP = Falsos Positivos (predije clase X pero NO era clase X)
+  FN = Falsos Negativos (era clase X pero predije otra)
+
+  ¿Por qué usar F1 y no solo accuracy?
+  → Con clases desbalanceadas, un modelo puede tener 80% accuracy
+    simplemente prediciendo siempre la clase más frecuente.
+  → F1 equilibra precision y recall, siendo más informativo.
+
+  F1 weighted vs F1 macro:
+  → weighted: pondera por número de muestras de cada clase → favorece clases mayoritarias
+  → macro: da igual peso a todas las clases → penaliza más el mal resultado en clases pequeñas
+
+────────────────────────────────────────────────────────────────────────────────
+TEMA D: GRIDSERACHCV Y OPTIMIZACIÓN DE HIPERPARÁMETROS
+────────────────────────────────────────────────────────────────────────────────
+
+¿Qué son los hiperparámetros?
+  → Parámetros que se configuran ANTES de entrenar (no los aprende el modelo).
+  → Ejemplos: n_estimators, max_depth, learning_rate...
+  → Los parámetros DEL modelo (pesos, umbrales) los aprende durante el entrenamiento.
+
+¿Qué hace GridSearchCV?
+  → Prueba todas las combinaciones posibles de hiperparámetros.
+  → Para cada combinación hace validación cruzada (cv=5 → 5-fold CV).
+  → Selecciona la combinación con mejor métrica (R² para reg, F1 para clf).
+  → n_jobs=-1 → usa todos los núcleos del procesador en paralelo.
+
+¿Por qué no optimizar en el test set?
+  → Si probáramos hiperparámetros sobre el test, estaríamos "haciendo trampa":
+    el test ya no sería un reflejo real del rendimiento con datos nuevos.
+  → Por eso GridSearchCV usa VALIDACIÓN CRUZADA sobre el training set.
+
+────────────────────────────────────────────────────────────────────────────────
+TEMA E: PREPROCESAMIENTO (estandarización, por qué y cómo)
+────────────────────────────────────────────────────────────────────────────────
+
+¿Por qué estandarizar?
+  → Variables en escalas distintas pueden dominar el aprendizaje.
+  → Ej: total_sulfur_dioxide (0-300) vs pH (2.5-4.0) sin escalar,
+    el primer feature domina distancias y gradientes.
+  → Random Forest y Decision Tree NO necesitan estandarización (son insensibles
+    a la escala), pero BayesianRidge y NaiveBayes SÍ la necesitan.
+  → En el proyecto se estandariza para todos por consistencia.
+
+StandardScaler: z = (x - μ) / σ
+  → μ = media del feature en training
+  → σ = desviación estándar del feature en training
+
+IMPORTANTE (data leakage):
+  scaler.fit_transform(X_train)   ← ajusta CON train y transforma
+  scaler.transform(X_test)        ← solo transforma, usa los parámetros de train
+  NUNCA: scaler.fit_transform(X_test) ← esto sería data leakage
+
+────────────────────────────────────────────────────────────────────────────────
+TEMA F: CURVA ROC Y AUC (conceptos)
+────────────────────────────────────────────────────────────────────────────────
+
+¿Qué es la curva ROC?
+  → Gráfica de TPR (Tasa de Verdaderos Positivos = Recall) vs
+    FPR (Tasa de Falsos Positivos = FP/(FP+TN))
+  → Se dibuja variando el umbral de clasificación.
+
+¿Qué es el AUC?
+  → Área Bajo la Curva ROC.
+  → AUC = 1.0 → clasificador perfecto
+  → AUC = 0.5 → clasificador aleatorio (sin información)
+  → AUC = 0.0 → clasificador perfectamente equivocado
+
+Para multiclase (este proyecto tiene 7 clases):
+  → Se usa la estrategia ONE-vs-REST (OvR):
+    Para cada clase, se calcula la curva ROC considerando esa clase como
+    "positivo" y todas las demás como "negativo".
+
+────────────────────────────────────────────────────────────────────────────────
+TEMA G: MATRIZ DE CONFUSIÓN
+────────────────────────────────────────────────────────────────────────────────
+
+Para 2 clases (binaria):
+           Pred: Positivo  Pred: Negativo
+Real: Pos     VP (TP)          FN
+Real: Neg     FP               VN (TN)
+
+Para multiclase (como en este proyecto, 7 clases):
+  → Matriz 7x7 donde [i,j] = número de muestras de clase i predichas como j
+  → La diagonal principal son los aciertos
+  → Fuera de la diagonal son los errores (confusiones)
+
+¿Qué te dice la matriz de confusión del proyecto?
+  → Random Forest confunde principalmente calidades adyacentes (5↔6, 6↔7)
+  → Las clases extremas (3, 4, 8, 9) tienen pocos aciertos → pocas muestras
+  → Naive Bayes tiene más errores dispersos (asunción de independencia falla)
+
+────────────────────────────────────────────────────────────────────────────────
+TEMA H: IMPORTANCIA DE CARACTERÍSTICAS (Feature Importance)
+────────────────────────────────────────────────────────────────────────────────
+
+¿Cómo calcula Random Forest la importancia?
+  → Para cada árbol, mide cuánto mejora cada feature la métrica de impureza
+    (Gini o MSE) en las divisiones donde aparece.
+  → Se promedia sobre todos los árboles.
+  → Valores entre 0 y 1, suman 1.
+
+¿Qué features son más importantes en este dataset?
+  → Alcohol: siempre aparece entre las más importantes
+    (más alcohol → tendencia a mayor calidad)
+  → Volatile_acidity: alta acidez volátil → peor calidad
+  → Density: correlacionada con alcohol (a más alcohol, menos densa)
+
+────────────────────────────────────────────────────────────────────────────────
+TEMA I: DESBALANCE DE CLASES (problema importante en este dataset)
+────────────────────────────────────────────────────────────────────────────────
+
+El problema:
+  → Calidad 6: ~35% de los datos
+  → Calidad 5: ~30% de los datos
+  → Calidad 7: ~20% de los datos
+  → Calidades 3, 4, 8, 9: <5% cada una
+
+El modelo aprende mejor las clases frecuentes y falla en las raras.
+
+Técnicas para solucionar el desbalance (no se aplican en el proyecto pero
+puede que te pregunten):
+  • Oversampling: duplicar muestras de clases minoritarias
+  • SMOTE: generar muestras sintéticas interpolando puntos existentes
+  • Undersampling: reducir muestras de clases mayoritarias
+  • class_weight='balanced': penalizar más los errores en clases pequeñas
+  • Cambiar la métrica de evaluación: usar F1-macro en vez de accuracy
+
+────────────────────────────────────────────────────────────────────────────────
+TEMA J: REGRESIÓN vs CLASIFICACIÓN (reflexión crítica)
+────────────────────────────────────────────────────────────────────────────────
+
+La variable quality es ORDINAL:
+  → Tiene orden natural: 3 < 4 < 5 < 6 < 7 < 8 < 9
+  → Pero son valores discretos (no hay calidad 5.5)
+
+Implicaciones:
+  • Regresión respeta el orden → error de 5→7 (error=2) peor que 5→6 (error=1)
+  • Clasificación no sabe que 5 y 6 son "cercanos" (para ella son clases distintas)
+
+¿Cuándo usar cada enfoque?
+  → CLASIFICACIÓN: cuando necesitas exactamente "¿es calidad 6 sí o no?"
+  → REGRESIÓN: cuando necesitas una estimación numérica (ranking, comparar vinos)
+
+En la práctica, para datos ordinales a veces se usa REGRESIÓN ORDINAL
+(algoritmo intermedio), aunque no se implementa en este proyecto.
+
+================================================================================
+  POSIBLES PREGUNTAS DEL PROFESOR Y RESPUESTAS CORTAS
+================================================================================
+
+P: ¿Por qué no usas Naive Bayes para regresión?
+R: Naive Bayes es un algoritmo de clasificación. No puede predecir valores
+   continuos. En su lugar usé BayesianRidge, que aplica el mismo razonamiento
+   bayesiano pero para regresión.
+
+P: ¿Qué es el random_state=42 y por qué se usa?
+R: Es una semilla para el generador de números aleatorios. Garantiza que los
+   resultados sean reproducibles: si alguien ejecuta el mismo código, obtendrá
+   exactamente los mismos resultados.
+
+P: ¿Por qué Random Forest es mejor que un Decision Tree?
+R: Random Forest combina muchos árboles (ensemble), cada uno entrenado con datos
+   ligeramente distintos. Al promediar/votar, se reduce la varianza sin aumentar
+   el sesgo. Un solo árbol sobreajusta más fácilmente.
+
+P: ¿Qué es el F1-score weighted y por qué se usa como métrica principal?
+R: Es la media armónica de precision y recall, ponderada por el número de
+   muestras de cada clase. Se usa porque el dataset está desbalanceado y
+   la accuracy sola puede ser engañosa.
+
+P: ¿Qué haría para mejorar los resultados?
+R: Aplicar SMOTE para balancear las clases, probar modelos más potentes como
+   XGBoost o LightGBM, hacer ingeniería de características (ej: ratio alcohol/densidad),
+   o explorar estrategias de umbral en las predicciones.
+
+P: ¿Por qué estandarizas si Random Forest no necesita escala?
+R: Por consistencia y para asegurar que BayesianRidge y GaussianNB funcionen
+   correctamente, ya que estos sí son sensibles a la escala. Random Forest
+   no se ve afectado por la estandarización.
+
+P: ¿Qué significa R²=0.5?
+R: Que el modelo explica el 50% de la varianza en la calidad del vino.
+   El otro 50% no puede capturarlo con las features disponibles.
+   R²=1 sería perfecto; R²=0 significa que el modelo no aporta nada.
+
+P: ¿Qué hace GridSearchCV exactamente?
+R: Prueba todas las combinaciones de hiperparámetros que le especificas,
+   evalúa cada una con validación cruzada de 5 pliegues, y devuelve la
+   combinación que obtuvo la mejor puntuación media en validación.
+
+P: ¿Por qué el modelo falla en las clases extremas (3, 4, 8, 9)?
+R: Porque hay muy pocas muestras de esas calidades. El modelo no tiene
+   suficientes ejemplos para aprender sus patrones. Es el problema del
+   desbalance de clases. Se podría mejorar con técnicas como SMOTE.
+
+================================================================================
+  RESUMEN ULTRA-RÁPIDO (para repasar antes de entrar a clase)
+================================================================================
+
+DATASET: 6497 vinos, 11 características químicas, quality 3-9
+
+EDA: desbalance (mayoría 5,6,7), alcohol=feature más importante, sin NaN
+
+PREPROCESAMIENTO: mismo split 80/20, StandardScaler (fit solo en train)
+
+REGRESIÓN (quality continua):
+  1. Random Forest → GANADOR (mejor R² y MAE)
+  2. Decision Tree → intermedio (sobreajusta más)
+  3. Bayesian Ridge → peor (relación no lineal)
+
+CLASIFICACIÓN (quality discreta):
+  1. Random Forest → GANADOR (mejor F1 y accuracy)
+  2. Decision Tree → intermedio
+  3. Gaussian Naive Bayes → peor (asume independencia, no se cumple)
+
+HERRAMIENTA CLAVE: GridSearchCV + 5-fold CV para optimizar hiperparámetros
+
+COMPARACIÓN FINAL: ambos enfoques dan resultados similares.
+Random Forest domina en ambos. Clasificación suele ser ligeramente mejor.
+
+================================================================================
+                            ¡MUCHA SUERTE EN LA DEFENSA!
+================================================================================
