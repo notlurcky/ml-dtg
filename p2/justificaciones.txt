@@ -1,0 +1,12 @@
+Justificación de la elección:
+1. KMeans me da clusters fijos y comparables entre ejecuciones, algo más cómodo para defender resultados.
+2. Los perfiles que salen son más fáciles de explicar (volumen, velocidad y horario por grupo).
+3. DBSCAN es muy potente para detectar estructura y ruido, pero su salida depende más de `eps` y `min_samples`, y eso complica la lectura para un informe académico.
+4. La diferencia de `silhouette` frente al mejor global existe, pero es asumible para el objetivo de comunicar perfiles claros y accionables.
+
+En esta última parte comparo ambos enfoques y exporto los resultados del modelo final elegido (KMeans).
+print('\nJustificación resumida de la decisión:')
+print(f'- Diferencia de silhouette respecto al mejor global: {delta_sil:.4f}')
+print('- Se prioriza interpretabilidad, estabilidad y facilidad de explicación de los perfiles.')
+print('- Para esta entrega, esa pérdida de score se considera asumible.')
+print('\n' + criterio_final)
